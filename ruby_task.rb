@@ -73,11 +73,9 @@ browser.divs(:class => 'contract status-active ').each_with_index do |contract_d
 end #first loop end
 
 def result
-	accounts.each do |account|
-	end
+	puts JSON.pretty_generate(accounts)
 end
 
-puts JSON.pretty_generate(accounts)
 
 
 
