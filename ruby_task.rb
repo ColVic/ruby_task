@@ -18,7 +18,7 @@ class Account
 	attr_accessor :a_name, :balance, :currency, :description, :transactions
 
 	def initialize(params = {})
-		@a_name = params.fetch(:a_name, '')
+		@name = params.fetch(:a_name, '')
 		@balance = params.fetch(:balance, 0)
 		@currency = params.fetch(:currency, '')
 		@description = params.fetch(:description, '')
@@ -72,11 +72,11 @@ browser.divs(:class => 'contract status-active ').each_with_index do |contract_d
 	transactions_to_account = []
 end #first loop end
 
-def result
+def result(accounts)
 	JSON.pretty_generate(accounts)
 end
 
-puts result
+puts result(accounts)
 
 
 
