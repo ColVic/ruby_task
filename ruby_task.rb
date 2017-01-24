@@ -4,8 +4,8 @@ require 'json'
 browser = Watir::Browser.new
 browser.goto 'https://wb.micb.md/way4u-wb2/#login'
 
-browser.text_field(:name => 'login').set 'bah4uk' #gets.chomp
-browser.text_field(:name => 'password').set '34erdfCV5' #gets.chomp
+browser.text_field(:name => 'login').set gets.chomp
+browser.text_field(:name => 'password').set gets.chomp
 browser.button(:type => 'submit').click
 
 accounts = []
