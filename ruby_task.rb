@@ -1,6 +1,5 @@
 require 'watir'
 require 'json'
-require 'pp'
 
 browser = Watir::Browser.new
 browser.goto 'https://wb.micb.md/way4u-wb2/#login'
