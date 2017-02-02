@@ -1,83 +1,131 @@
-require 'watir'
+require 'watir-webdriver'
+require 'nokogiri'
 require 'json'
+require 'pry'
+require 'pry-byebug'
+require 'date'
 
-browser = Watir::Browser.new
+browser = Watir::Browser.new :firefox
 browser.goto 'https://wb.micb.md/way4u-wb2/#login'
+
+browser.text_field(:name => 'login').wait_until_present
 
 browser.text_field(:name => 'login').set gets.chomp
 browser.text_field(:name => 'password').set gets.chomp
 browser.button(:type => 'submit').click
 
 accounts = []
-acc_name, acc_balance, acc_currency, acc_description = [], [], [], []
-transactions_to_account = []
-transactions = []
-trans_date, tran_description, trans_amount = [], [], []
+temp = {}
 
-class Account
-	attr_accessor :a_name, :balance, :currency, :description, :transactions
+MONTHS = {
+	'ianuarie'   => 1,
+	'februarie'  => 2,
+	'martie'     => 3,
+	'aprilie'    => 4,
+	'mai'        => 5,
+	'iunie'      => 6,
+	'iulie'      => 7,
+	'august'     => 8,
+	'seprembrie' => 9,
+	'octombrie'  => 10,
+	'noiembrie'  => 11,
+	'decembrie'  => 12
+}
 
-	def initialize(params = {})
-		@name = params.fetch(:a_name, '')
-		@balance = params.fetch(:balance, 0)
-		@currency = params.fetch(:currency, '')
-		@description = params.fetch(:description, '')
-		@transactions = params.fetch(:transactions, [])
+browser.div(:class => 'contracts-section').wait_until_present
+
+local_data = Nokogiri::HTML(browser.div(:class => 'contracts-section').html)
+
+def base_account_data(page, accounts)
+	page.css('div.contract.status-active').each do |data|
+		accounts << {
+			name:         data.css('a.name').text,
+			balance:      data.css('div.balance.available').css('span')[0].text,
+			currency:     data.css('div.balance.available').css('span')[1].text,
+			transactions: []
+		}
 	end
-
-	def to_hash
-    hash = {}
-    instance_variables.each {|var| hash[var.to_s.delete("@")] = instance_variable_get(var) }
-    hash
-  end
-
 end
 
-class Transaction < Account
-	attr_accessor :date, :description, :amount
-
-	def initialize(params = {})
-		@date = params.fetch(:date, 'yy-mm-ddTh-i-s')
-		@description = params.fetch(:description,'')
-		@amount = params.fetch(:amount, 0)
-	end
-
+def reformat_date(bad_format)
+	good_format = Date.parse "#{bad_format[:year]}/#{MONTHS[bad_format[:month]]}/#{bad_format[:day]}"
+	good_format.strftime('%Y-%m-%d')
+	pp good_format.strftime('%Y-%m-%d')
 end
 
-browser.div(:class => 'contract').a(:class => 'name').wait_until_present
+def transaction_account_data(page, account)
+	temp_date = {}
+	transactions = []
+	page.css('div.month-delimiter, div.day-operations').each do |operation_row| #first loop
+		
+		#binding.pry
+		
+		if operation_row.to_h.has_value? 'month-delimiter'
+			temp_date[:month] = operation_row.text.split(' ').first
+			temp_date[:year]  = operation_row.text.split(' ').last
+			next
+		end		
+		
+		temp_date[:day]   = operation_row.css('div.day-header').text.split(' ').first
 
-browser.divs(:class => 'contract status-active ').each_with_index do |contract_div, i| #first loop start
-	acc_name[i] = contract_div.a(:class => 'name').text
-	acc_balance[i] = contract_div.div(:class => 'balance available').span.text
-	acc_currency[i] = contract_div.div(:class => 'balance available').span(:class => 'currency').text
+		operation_row.css('li.history-item.success').each do |operation| #third loop
+			amount = 
+				operation.css('span.history-item-amount.total').text.empty? ? 
+				operation.css('span.history-item-amount.transaction').css('span[class$="amount"]').text.gsub(',', '.').to_f : 
+				operation.css('span.history-item-amount.total').css('span[class$="amount"]').text.gsub(',', '.').to_f
 
-	contract_div.a(:class => 'name').click
-	browser.a(:href => "#contract-information").click
+			currency = 
+				operation.css('span.history-item-amount.total').text.empty? ? 
+				operation.css('span.history-item-amount.transaction').css('span.currency').text : 
+				operation.css('span.history-item-amount.total').css('span.currency').text
 
-	acc_description[i] = browser.element(:xpath => '//*[@id="contract-information"]/table/tbody/tr[3]/td[2]').text
+			amount = "+#{amount}" if operation.css('span.history-item-amount.transaction').to_s.include? 'income'
 
+			date = reformat_date(temp_date)
+
+			transactions << {
+				date:        date,
+				description: operation.css('a.operation-details').text,
+				amount:      amount,
+				currency:    currency
+			}	
+			account[:transactions] << transactions
+
+		end #third loop
+	end #first loop
+end #function
+
+base_account_data(local_data, accounts)
+
+accounts.each do |account|
+	browser.a(:title => account[:name]).wait_until_present
+	sleep 1
+	browser.a(:title => account[:name]).click
+	browser.ul(:class => 'ui-tabs-nav').wait_until_present
+	browser.a(:href => '#contract-information').click
+	
+	account[:description] = browser.element(:xpath => '//*[@id="contract-information"]/table/tbody/tr[3]/td[2]').text
+	account[:holder_name] = browser.element(:xpath => '//*[@id="contract-information"]/table/tbody/tr[4]/td[2]').text
+	
+	browser.a(:href => '#contract-history').wait_until_present
 	browser.a(:href => '#contract-history').click
-	browser.a(:class => 'operation-details').wait_until_present
-
-	browser.divs(:class => 'day-operations').each_with_index do |transaction, j| #second loop start
-		trans_date[j] = 'yy-mm-ddTh-i-s'
-		tran_description[j] = transaction.a(:class => 'operation-details').text
-		trans_amount[j] = transaction.span(:class => 'history-item-amount transaction ').span.text
-		transactions_to_account[j] = Transaction.new(:date => trans_date[j], :description => tran_description[j], :amount => trans_amount[j]).to_hash
-		transactions << transactions_to_account[j]
-	end #second loop end
-
-	browser.li(:class => 'new_cards_accounts-menu-item').click
-	accounts[i] = Account.new(:a_name => acc_name[i], :balance => acc_balance[i], :currency => acc_currency[i], :description => acc_description[i], :transactions => transactions_to_account).to_hash
-	transactions_to_account = []
-end #first loop end
-
-def result(accounts)
-	JSON.pretty_generate(accounts)
+	browser.div(:class => 'filter filter_period').wait_until_present
+	browser.input(:name => 'from').click
+	browser.a(:class => 'ui-datepicker-prev').wait_until_present
+	browser.a(:class => 'ui-datepicker-prev').click
+	browser.table(:class => 'ui-datepicker-calendar').a(:text => '1').wait_until_present
+	browser.table(:class => 'ui-datepicker-calendar').a(:text => '1').click
+	
+	browser.div(:class => 'operations').wait_until_present
+	sleep 1
+	local_data = Nokogiri::HTML(browser.div(:class => 'operations').html)
+	
+	transaction_account_data(local_data, account)
+	pp account
+	browser.a(:href => '#menu/MAIN_MENU_WB2.NEW_CARDS_ACCOUNTS').click
+	
 end
+binding.pry
+JSON.pretty_generate(accounts)
 
-puts result(accounts)
-
-
-
-
+#binding.pry
