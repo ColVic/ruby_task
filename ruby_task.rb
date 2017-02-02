@@ -121,11 +121,10 @@ accounts.each do |account|
 	local_data = Nokogiri::HTML(browser.div(:class => 'operations').html)
 	
 	transaction_account_data(local_data, account)
-	pp account
 	browser.a(:href => '#menu/MAIN_MENU_WB2.NEW_CARDS_ACCOUNTS').click
 	
 end
-binding.pry
+
 JSON.pretty_generate(accounts)
 
 #binding.pry
